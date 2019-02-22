@@ -72,7 +72,7 @@ multiplexing, isolation, interaction.
 
 ・disk上のfileをread or writeしたいappは、kernelがそうするようにtransitionしないといけない
 ・なぜなら、app自身はI/O命令を実行できないから
-・CPUは、CPUをuser modeからkernel modeへ切り替える命令と、kernelによってい示されるentry pointへ入る命令を発行する
+・CPUは、CPUをuser modeからkernel modeへ切り替える命令と、kernelによって示されるentry pointへ入る命令を発行する
 ・(x86 CPUこのために`int`命令を使用している)
 ・一度CPUがkernel modeへ変わると、kernelはsys call達を有効化できるようになり、appがrequestされた操作を実行できるかどうか決定する、そして拒否するか、または実行する
 ・kernelが、transitionのためにentry pointをkernel modeへとsetしておくことが重要
@@ -99,3 +99,35 @@ multiplexing, isolation, interaction.
 ・kernel内のミスのリスクをへらすために
 OSデザイナーは、kernel modeで動くosのコード量を最小限にする。そしてuser modeでのOSのbulk(?)を実行する
 ・このkernelの仕組みを*microkernel*という
+
+
+## Process overview
+・各々のプロセスには、アドレス空間を持つ(page tableによって実現する)
+
+・xv6のkernelは各プロセスの状態をmaintainする
+
+・それぞれのプロセスは実行スレッドをもつ。
+・スレッドは一時中断でき、後に再開することもできる
+・プロセス間をスイッチするために、kernelは現在動作中のスレッドを一時中断し、別プロセスのスレッドを再開させる
+・スレッドの状態のほとんど（local変数、関数呼び出しの戻りアドレス）はスレッドstackにstoreされている
+・各プロセスは２つのstackをもつ: user stack, kernel stack(p->kstack)
+・プロセスがuser命令を実行中は、user stackだけ使用でき、kernelスタックは空となっている
+・プロセスがkernel内にいるとき（for system call or interrupt）は、kernel stack上で、kernelのcodeが実行される：
+    プロセスがkernelにいる間は、user stackはもとの状態をsaveしていますが、使用はできない
+・・・
+
+・processがsystem callを発行するとき、CPUはkernel stackへと切り替え、hardware privileged levelを上げ、system callを実行する
+・system callが完了すると、kernelはuser空間へと戻る:
+    privilege levelを下げ、user stackへとスイッチし、system call命令の直後のuser命令から再開する
+・processのスレッドはkernel内で"block"ができる。I/O待ちのため。
+・I/Oが終わると、blockした場所から再開する
+
+・p->stateはプロセスの状態を表す: allocated, ready to run, runnning, waiting for I/O, exiting
+
+・p->pgdirはprocessのpage tableを保持する
+・プロセスのpage tableはプロセスのメモリをstoreする物理アドレスも提供する
+
+
+
+##感想
+・PCの電源をONにすると、BIOSが立ち上がり、disk上に存在するbootloaderのプログラムをメモリ上にreadする。bootloaderを実行する. bootloaderはディスク上のkernelを、物理メモリの最初の方（具体的には？）に読み込み実行する。kernelがpage tableを作り、自身の動作場所を物理アドレスから仮想アドレスへとシフトする。
