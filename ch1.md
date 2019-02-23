@@ -129,5 +129,58 @@ OSデザイナーは、kernel modeで動くosのコード量を最小限にす�
 
 
 
-##感想
+## Code: the first address space
+・以下の３つを見ていく
+・どうやってkernelがはじめのaddress空間(自分自身のための空間)を生成するか
+・どうやってkernelが最初のプロセスを作り、実行するか
+・どうやってプロセスが最初のsystem callを行うか
+
+・PCの電源が入った時、自分自身を初期化し、diskからboot loaderを読み込み、メモリへと書き出し、boot loaderを実行する(Appendix Bで詳細に説明)
+・xv6のboot loaderはdiskからkernelをloadし、`entry(1044)`から実行する
+・x86のpaging hardwareは、kernelがstart時には使用できない;
+    つまり、仮想アドレスが直接（変換されず）物理アドレスとなる
+
+・boot loaderはxv6のkernelを物理アドレスの`0x100000`へとloadする
+・kernelが`0x80100000`へとloadされない理由は、小さなmachineにはそのような物理的なhighアドレスがそんざいしないから。
+・`0x0`へとloadしない`0xa0000:0x100000`はI/Oデバイスが使用するから
+
+・kernelの残りを走らせるために、`entry(1044)`はpage tableをset upする。
+    仮想アドレス`0x80000000`(KERNBASE と呼ばれる)を物理アドレス`0x0`へとmappingする
+・仮想アドレスの２つのrangeが同じ物理アドレスのrangeをmappingするよう設定、共通のpage tableとなる、
+
+・entry page tableはmain.c(1306)で定義される。
+
+・entry 0は仮想アドレス`0:0x400000`を物理アドレス`0:0x400000`へとmapする
+・このmappingは`entry`をlow addressで実行している限りは必要となる、だがゆくゆくは削除される
+
+・entry512は仮想アドレス`KERNBASE:KERNBASE+0x400000`を物理アドレス`0:0x400000`へとmapする
+・このentryは`entry`が終了したあとに使用されます;
+    high仮想アドレス(kernelのdataと命令が格納された)とlow物理アドレス(boot loaderがkernelをloadした場所)とをmappingする
+・このmappingにより、kernelの命令とdataは4MBまでに制限される
+
+・`entry`から戻ると、物理アドレス`entrypgdir`が`cr3`へとloadされる
+・`cr3`レジスタの値は物理アドレスでないといけない
+・
+
+・pagingがenableになったあとも、CPUはlow addressで命令を実行している
+・entrypgdirからentry0を省いてしまうと、computerはcrashする
+
+・現在`entry`はkernelのC言語に変換し、highメモリで実行する必要がある
+・・・
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 感想
 ・PCの電源をONにすると、BIOSが立ち上がり、disk上に存在するbootloaderのプログラムをメモリ上にreadする。bootloaderを実行する. bootloaderはディスク上のkernelを、物理メモリの最初の方（具体的には？）に読み込み実行する。kernelがpage tableを作り、自身の動作場所を物理アドレスから仮想アドレスへとシフトする。
