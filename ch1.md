@@ -169,12 +169,46 @@ OSデザイナーは、kernel modeで動くosのコード量を最小限にす�
 ・・・
 
 
+## Code: creating the first process
+・どうやってkernelがuser-levelのプロセスを生成し、それぞれのプロセス間の強力なisolationを実現しているか、見ていこう
 
+・`main(1217)`内でいくつかのデバイスとサブシステムが初期化された後、`userinit(2520)`が呼び出され、最初のプロセスが生成される
+・`userinit()`の最初のアクションは`allocproc`を呼ぶことです
+・`allocproc`の仕事はプロセスtable内にslotを割り当てることと、プロセスの状態を、kernelが実行するために必要な状態へ初期化することです
+・`allocproc`は新しいプロセスのたびに呼ばれるのに対し、`userinit()`は（最初の）一度きりしか呼ばれません
+・`allocproc`は`proc`table内でstateが`UNUSED`なものを探す
+・・・
+・次にkernel stackをプロセスのkernelスレッドに割り当てようとする。
+・もしメモリ割り当てに失敗したら、`allocproc`はstateを`UNUSED`へともどし、失敗値0を返す
 
+・今、`allocproc`は新しいプロセスのkernel stackをset upしないといけない
+・`allocproc`は`fork`ができるように書かれる
+・`allocproc`は特別に用意されたkernel stackをもつ新しいプロセスをset upし、はじめて走った時
 
+・・・
 
+・Ch03で見るが、userソフトウェアからkernelへ、interruptメカニズムを通しての変換は、system call(interrupts, exceptions)が用いられる。
+・プロセスが走っている間はいつでもkernel modeへと変換する、ハードウェアとxv6はそのプロセスのkernel stack上にuser registerを保存する
+・もし、プロセスがinterruptを通してkernelへと入ったら、`userinit`は新しいstackの上に値を書きます。そのためkernelからuserプロセスへと戻るcodeは一般的にうまく動きます
+・これらの値は`struct trapframe`であり、userレジスタにstoreされています。
+・今、新しいプロセスのkernel stackはFig1-4のように完璧に準備されました。
 
+・最初のプロセスは小さなプログラム(`initcode.S`)を実行しようとします。
+・プロセスにはこのプログラムをstoreするための物理メモリが必要です、そしてプログラムはそんなメモリへコピーされることが必要です、そしてプロセスにはuser空間のアドレスからそのメモリへmapするpage tableが必要です
 
+・`userinit`は`setupkvm(1818)`を呼びます、これはkernelが使用するメモリのためだけのmappingを持つプロセスのpage tableを生成するためです。
+・・・
+
+・最初のプロセスのuser空間メモリの中身は、コンパイルされた`initcode.S`です。
+    `initcode.S`はkernel buildプロセスの一部であり、linkerはkernelの中にbinaryとして、`_binary_initcode_start`と`_binary_initcode_size`を埋め込みます
+・・・
+
+## Code: Running the first process
+・`Scheduler`はp->stateが`RUNNABLE`であるプロセスをさがす、そしてそれは一つしかない: `initproc`です
+
+・`Scheduler`は`p->state`を`RUNNING`にし、targetプロセスのkernelスレッドへとcontext switchするために`swtch`を呼ぶ
+・`swtch`は初め現在のレジスタを保存する
+・現在のコンテキストはプロセスではなく特別なper-cpu schedulerコンテキストである。
 
 
 
